@@ -5,25 +5,30 @@ namespace Subtests.XunitExtensions;
 
 public class TestTestCase : XunitTestCase
 {
+    public object?[]? DataRow { get; }
+    
     private readonly ICaseHandler _caseHandler;
     
     public TestTestCase(IMessageSink diagnosticMessageSink,
         TestMethodDisplay defaultMethodDisplay,
         TestMethodDisplayOptions defaultMethodDisplayOptions,
         ITestMethod testMethod,
-        ICaseHandler caseHandler)
+        object?[] testMethodArguments,
+        ICaseHandler caseHandler,
+        object?[]? dataRow)
         : base(diagnosticMessageSink,
             defaultMethodDisplay,
             defaultMethodDisplayOptions,
             testMethod,
-            testMethodArguments: new object?[] { caseHandler.DisplayName })
+            testMethodArguments)
     {
         _caseHandler = caseHandler;
+        DataRow = dataRow;
     }
     
     protected override string? GetDisplayName(IAttributeInfo factAttribute, string displayName)
     {
-        return _caseHandler.DisplayName;
+        return TestMethod.Method.GetDisplayNameWithArguments(_caseHandler.DisplayName, DataRow, MethodGenericTypes);
     }
 
     public override Task<RunSummary> RunAsync(IMessageSink diagnosticMessageSink,

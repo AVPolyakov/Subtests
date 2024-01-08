@@ -14,41 +14,72 @@ public class TestTestDiscoverer : IXunitTestCaseDiscoverer
     public const string AssemblyName = "Subtests";
 
     private readonly IMessageSink _diagnosticMessageSink;
+    private readonly Lazy<TestTheoryDiscoverer> _testTheoryDiscoverer;
 
     public TestTestDiscoverer(IMessageSink diagnosticMessageSink)
     {
         _diagnosticMessageSink = diagnosticMessageSink;
+
+        _testTheoryDiscoverer = new Lazy<TestTheoryDiscoverer>(() => new TestTheoryDiscoverer(diagnosticMessageSink));
     }
 
     public IEnumerable<IXunitTestCase> Discover(ITestFrameworkDiscoveryOptions discoveryOptions, ITestMethod testMethod, IAttributeInfo factAttribute)
     {
-        yield return new TestTestCase(_diagnosticMessageSink,
-            discoveryOptions.MethodDisplayOrDefault(),
-            discoveryOptions.MethodDisplayOptionsOrDefault(),
-            testMethod,
-            new WithAllSubtestsCaseHandler(testMethod));
-        
-        yield return new TestTestCase(_diagnosticMessageSink,
-            discoveryOptions.MethodDisplayOrDefault(),
-            discoveryOptions.MethodDisplayOptionsOrDefault(),
-            testMethod,
-            new WithoutSubtestsCaseHandler(testMethod));
-        
+        var dataAttributes = testMethod.Method.GetCustomAttributes(typeof(DataAttribute));
+        return dataAttributes.Any()
+            ? _testTheoryDiscoverer.Value.Discover(discoveryOptions, testMethod, factAttribute)
+            : InternalDiscover(_diagnosticMessageSink, discoveryOptions, testMethod,
+                dataRow: null);
+    }
+
+    private static IEnumerable<IXunitTestCase> InternalDiscover(IMessageSink diagnosticMessageSink,
+        ITestFrameworkDiscoveryOptions discoveryOptions,
+        ITestMethod testMethod,
+        object?[]? dataRow)
+    {
+        yield return CreateTestCase(new WithAllSubtestsCaseHandler(testMethod));
+
+        yield return CreateTestCase(new WithoutSubtestsCaseHandler(testMethod));
+
         if (testMethod.Method is IReflectionMethodInfo reflectionMethodInfo)
         {
             var subtestCaseHandlers = GetSubtestUsageInfos(reflectionMethodInfo.MethodInfo)
                 .GroupBy(x => x.DisplayName)
-                .SelectMany(g => g.Skip(1).Any() 
-                    ? g.OrderBy(x => x.Usage.CallerLineNumber).Select((subtestUsageInfo, index) => new SubtestCaseHandler(subtestUsageInfo, index)) 
+                .SelectMany(g => g.Skip(1).Any()
+                    ? g.OrderBy(x => x.Usage.CallerLineNumber).Select((subtestUsageInfo, index) => new SubtestCaseHandler(subtestUsageInfo, index))
                     : g.Select(subtestUsageInfo => new SubtestCaseHandler(subtestUsageInfo, index: null)));
             foreach (var subtestCaseHandler in subtestCaseHandlers)
-            {
-                yield return new TestTestCase(_diagnosticMessageSink,
-                    discoveryOptions.MethodDisplayOrDefault(),
-                    discoveryOptions.MethodDisplayOptionsOrDefault(),
-                    testMethod,
-                    subtestCaseHandler);
-            }
+                yield return CreateTestCase(subtestCaseHandler);
+        }
+        
+        TestTestCase CreateTestCase(ICaseHandler caseHandler)
+        {
+            var testMethodArguments = new object?[] { caseHandler.DisplayName };
+            if (dataRow != null) 
+                testMethodArguments = testMethodArguments.Concat(dataRow).ToArray();
+
+            return new TestTestCase(diagnosticMessageSink,
+                discoveryOptions.MethodDisplayOrDefault(),
+                discoveryOptions.MethodDisplayOptionsOrDefault(),
+                testMethod,
+                testMethodArguments,
+                caseHandler,
+                dataRow);
+        }
+    }
+    
+    private class TestTheoryDiscoverer : TheoryDiscoverer
+    {
+        public TestTheoryDiscoverer(IMessageSink diagnosticMessageSink) : base(diagnosticMessageSink)
+        {
+        }
+
+        protected override IEnumerable<IXunitTestCase> CreateTestCasesForDataRow(ITestFrameworkDiscoveryOptions discoveryOptions,
+            ITestMethod testMethod,
+            IAttributeInfo theoryAttribute,
+            object?[]? dataRow)
+        {
+            return InternalDiscover(DiagnosticMessageSink, discoveryOptions, testMethod, dataRow);
         }
     }
 

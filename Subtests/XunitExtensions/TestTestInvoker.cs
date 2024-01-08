@@ -22,7 +22,7 @@ public class TestTestInvoker : XunitTestInvoker
             testClass,
             constructorArguments,
             testMethod,
-            testMethodArguments: null,
+            testMethodArguments: testTestCase.DataRow,
             beforeAfterAttributes,
             aggregator,
             cancellationTokenSource)

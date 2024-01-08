@@ -65,4 +65,19 @@ public class AsyncTests : TestBase
             await Task.CompletedTask;
         });
     }
+
+    [Test]
+    [InlineData(1, "A")]
+    [InlineData(2, "B")]
+    public async Task Case8_Success(int x, string y)
+    {
+        _testOutputHelper.WriteCallerInfo();
+
+        await Subtest(name: "InlineCase2_Success", func: async () =>
+        {
+            _testOutputHelper.WriteCallerInfo($"InlineCase2 x={x}, y={y}");
+            
+            await Task.CompletedTask;
+        });
+    }
 }
