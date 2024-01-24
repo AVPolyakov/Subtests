@@ -73,4 +73,22 @@ public class AsyncAdvancedTests : TestBase
             await Task.CompletedTask;
         });
     }
+
+    [Test]
+    public async Task Case4_Success()
+    {
+        var id = 1;
+        
+        await Case5_Success(id);
+    }
+
+    private Task Case5_Success(int id) => Subtest(async () =>
+    {
+        await Case6_Success(id);
+    });
+
+    private Task Case6_Success(int id) => Subtest(async () =>
+    {
+        await Task.CompletedTask;
+    });
 }

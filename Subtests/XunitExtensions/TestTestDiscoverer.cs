@@ -143,7 +143,7 @@ public class TestTestDiscoverer : IXunitTestCaseDiscoverer
         foreach (var usage in usages)
         {
             var declaringType = usage.CurrentMethod.DeclaringType;
-            if (declaringType?.GetCustomAttribute<CompilerGeneratedAttribute>() != null && typeof(IAsyncStateMachine).IsAssignableFrom(declaringType))
+            if (declaringType != null && IsCompilerGenerated(declaringType) && typeof(IAsyncStateMachine).IsAssignableFrom(declaringType))
             {
                 if (declaringType.IsValueType)
                 {
@@ -159,10 +159,7 @@ public class TestTestDiscoverer : IXunitTestCaseDiscoverer
                         var constructorUsages = resolveUsages[constructorInfo];
                         foreach (var constructorUsage in constructorUsages)
                         {
-                            if (constructorUsage.CurrentMethod.DeclaringType == rootType)
-                            {
-                                yield return new Usage(constructorUsage.CurrentMethod, usage.ResolvedMember, usage.Instructions);
-                            }
+                            yield return new Usage(constructorUsage.CurrentMethod, usage.ResolvedMember, usage.Instructions);
                         }
                     }
                 }
@@ -172,6 +169,18 @@ public class TestTestDiscoverer : IXunitTestCaseDiscoverer
                 yield return usage;
             }
         }
+    }
+
+    private static bool IsCompilerGenerated(Type type)
+    {
+        if (type.GetCustomAttribute<CompilerGeneratedAttribute>() != null)
+            return true;
+
+        var declaringType = type.DeclaringType;
+        if (declaringType == null)
+            return false;
+
+        return IsCompilerGenerated(declaringType);
     }
 
     private static readonly ConcurrentDictionary<Type, ILookup<MemberInfo?, Usage>> _usagesDictionary = new();
@@ -188,15 +197,18 @@ public class TestTestDiscoverer : IXunitTestCaseDiscoverer
         return _localVariablesDictionary.GetOrAdd(rootType, t => GetLocalVariableInfoEnumerable(t).ToLookup(x => x.LocalVariableInfo.LocalType));
     }
 
-    private static IEnumerable<LocalVariableTuple> GetLocalVariableInfoEnumerable(Type type)
+    private static IEnumerable<LocalVariableTuple> GetLocalVariableInfoEnumerable(Type rootType)
     {
-        var methodBases = type.GetMethods(AllBindingFlags).AsMethodBases().Concat(type.GetConstructors(AllBindingFlags));
-        foreach (var methodBase in methodBases)
+        foreach (var type in GetTypes(rootType))
         {
-            var methodBody = methodBase.GetMethodBody();
-            if (methodBody != null)
-                foreach (var localVariableInfo in methodBody.LocalVariables)
-                    yield return new LocalVariableTuple(methodBase, localVariableInfo);
+            var methodBases = type.GetMethods(AllBindingFlags).AsMethodBases().Concat(type.GetConstructors(AllBindingFlags));
+            foreach (var methodBase in methodBases)
+            {
+                var methodBody = methodBase.GetMethodBody();
+                if (methodBody != null)
+                    foreach (var localVariableInfo in methodBody.LocalVariables)
+                        yield return new LocalVariableTuple(methodBase, localVariableInfo);
+            }
         }
     }
 
